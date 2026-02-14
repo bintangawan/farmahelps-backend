@@ -19,6 +19,11 @@ const journalRoutes = require('./routes/journalRoutes');
 
 const app = express();
 
+// Trust proxy (Nginx reverse proxy di production)
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
+
 // ==========================================
 // KEMANAN CORS (Strict Mode) 🔒
 // ==========================================
