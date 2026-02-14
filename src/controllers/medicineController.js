@@ -88,14 +88,33 @@ const getDashboardStats = async (req, res) => {
             )
         `, [userId]);
 
-        // 2. Active Schedules (Tetap Sama)
-        const [schedules] = await db.query(`
-            SELECT s.id, s.time, m.name as medicine_name 
+        // 2. Active Schedules & Today Schedules
+        // Hitung total jadwal aktif
+        const [allActiveSchedules] = await db.query(`
+            SELECT COUNT(*) as total FROM schedules 
+            WHERE user_id = ? AND is_active = 1
+        `, [userId]);
+
+        // Ambil jadwal HARI INI saja (filter by day name + date range + is_active)
+        // Termasuk status is_taken dan taken_at dari schedule_logs
+        const [todaySchedules] = await db.query(`
+            SELECT 
+                s.id, 
+                s.time, 
+                m.name as medicine_name,
+                CASE WHEN sl.id IS NOT NULL THEN 1 ELSE 0 END as is_taken,
+                sl.taken_at
             FROM schedules s
             JOIN medicines m ON s.medicine_id = m.id
-            WHERE s.user_id = ? AND s.is_active = 1
+            LEFT JOIN schedule_logs sl ON s.id = sl.schedule_id 
+                AND sl.scheduled_date = CURDATE()
+                AND sl.user_id = ?
+            WHERE s.user_id = ? 
+                AND s.is_active = 1
+                AND CURDATE() BETWEEN s.start_date AND s.end_date
+                AND JSON_CONTAINS(s.days, CONCAT('"', DATE_FORMAT(CURDATE(), '%a'), '"'))
             ORDER BY s.time ASC
-        `, [userId]);
+        `, [userId, userId]);
 
         // 3. STATISTIK KEPATUHAN (7 HARI TERAKHIR) -- BARU
         // Query ini menghitung jumlah log 'taken' per tanggal
@@ -123,7 +142,7 @@ const getDashboardStats = async (req, res) => {
         // Hitung target harian (Total jadwal aktif * 1, asumsi sederhana)
         // Idealnya target dihitung berdasarkan historical schedule, tapi untuk dashboard sederhana,
         // kita gunakan jumlah jadwal aktif saat ini sebagai baseline target.
-        const dailyTarget = schedules.length; 
+        const dailyTarget = todaySchedules.length;
 
         // Format data untuk Recharts
         const chartData = complianceStats.map(item => ({
@@ -138,9 +157,15 @@ const getDashboardStats = async (req, res) => {
             data: {
                 total_medicines: totalMed[0].total,
                 attention_needed: attentionMed[0].total,
-                active_schedules: schedules.length,
-                today_schedules: schedules, // Kirim list jadwal mentah (filter di FE jika perlu)
-                chart_data: chartData // <--- Data Grafik
+                active_schedules: allActiveSchedules[0].total,
+                today_schedules: todaySchedules.map(s => ({
+                    id: s.id,
+                    medicine_name: s.medicine_name,
+                    time: s.time,
+                    is_taken: Boolean(s.is_taken),
+                    taken_at: s.taken_at || null
+                })),
+                chart_data: chartData
             }
         });
 

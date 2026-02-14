@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const startCronJobs = require('./services/cronService');
+const { apiLimiter } = require('./middleware/rateLimiter');
 
 // Load env vars
 dotenv.config();
@@ -22,8 +23,8 @@ const app = express();
 // KEMANAN CORS (Strict Mode) 🔒
 // ==========================================
 const whitelist = [
-    'http://localhost:5173', // Frontend Development
-    'http://localhost:4173', // Frontend Preview
+    'http://localhost:9000', // Frontend Development
+    'https://farmahelps.bintangin.com', // Frontend Production
     process.env.CLIENT_URL   // Domain Production (set di .env nanti)
 ];
 
@@ -45,7 +46,30 @@ const corsOptions = {
 app.use(cors(corsOptions));
 // ==========================================
 
-app.use(express.json());
+// ==========================================
+// SECURITY HEADERS 🔒
+// ==========================================
+app.use((req, res, next) => {
+    // Fix COOP: izinkan popup Google OAuth berkomunikasi dengan window parent
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    // Cegah browser menebak MIME type
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Cegah clickjacking
+    res.setHeader('X-Frame-Options', 'DENY');
+    // Aktifkan XSS Protection di browser lama
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    // Cegah browser mengirim Referer header berlebihan
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Batasi permission API browser
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+});
+// ==========================================
+
+app.use(express.json({ limit: '10kb' })); // Batasi ukuran body request
+
+// Global Rate Limiter
+app.use('/api', apiLimiter);
 
 // Routes Registration
 app.use('/api/auth', authRoutes);

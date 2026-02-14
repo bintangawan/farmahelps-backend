@@ -1,24 +1,35 @@
 const db = require('../config/db');
 
+// @desc    Cek apakah user punya subscription aktif
+// @route   GET /api/notifications/check-subscription
+const checkSubscription = async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT id FROM push_subscriptions WHERE user_id = ? LIMIT 1',
+            [req.user.id]
+        );
+        res.json({ success: true, hasSubscription: rows.length > 0 });
+    } catch (error) {
+        console.error('Check subscription error:', error);
+        res.status(500).json({ success: false, hasSubscription: false });
+    }
+};
+
 // @desc    Subscribe / Refresh Token Browser
 const subscribePush = async (req, res) => {
     const { endpoint, keys } = req.body;
     const userId = req.user.id;
 
     try {
-        // Query "UPSERT" (Update if exists, Insert if new)
-        // Jika endpoint sudah ada, kita update user_id-nya (berjaga-jaga kalau user ganti akun di browser sama)
-        // Dan kita tidak perlu Select dulu (hemat query)
-        const query = `
-            INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
-                user_id = VALUES(user_id),
-                keys_p256dh = VALUES(keys_p256dh),
-                keys_auth = VALUES(keys_auth)
-        `;
+        // 1. Hapus subscription LAMA milik user ini
+        await db.query('DELETE FROM push_subscriptions WHERE user_id = ?', [userId]);
+        // 2. Hapus subscription dengan endpoint yang sama (misal: user lain pernah login di browser ini)
+        await db.query('DELETE FROM push_subscriptions WHERE endpoint = ?', [endpoint]);
 
-        await db.query(query, [userId, endpoint, keys.p256dh, keys.auth]);
+        await db.query(
+            'INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth) VALUES (?, ?, ?, ?)',
+            [userId, endpoint, keys.p256dh, keys.auth]
+        );
 
         res.status(200).json({ success: true, message: 'Subscription synced.' });
     } catch (error) {
@@ -52,4 +63,4 @@ const getNotifications = async (req, res) => {
     }
 };
 
-module.exports = { subscribePush, getNotifications };
+module.exports = { subscribePush, getNotifications, checkSubscription };

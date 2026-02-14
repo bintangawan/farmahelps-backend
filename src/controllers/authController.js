@@ -47,7 +47,8 @@ const registerUser = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Register Error:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server. Silakan coba lagi.' });
     }
 };
 
@@ -76,7 +77,8 @@ const loginUser = async (req, res) => {
             res.status(401).json({ success: false, message: 'Invalid email or password' });
         }
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Login Error:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server. Silakan coba lagi.' });
     }
 };
 

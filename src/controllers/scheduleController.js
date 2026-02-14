@@ -81,7 +81,9 @@ const addSchedule = async (req, res) => {
 // @desc    Mark schedule as TAKEN for today
 const markAsTaken = async (req, res) => {
     const { id } = req.params; 
-    const today = new Date().toISOString().slice(0, 10); 
+
+    // PENTING: Gunakan CURDATE() dari MySQL agar konsisten dengan getSchedules
+    // Jangan pakai new Date().toISOString() karena itu UTC, bisa beda hari dengan server MySQL
 
     try {
         const [check] = await db.query('SELECT id, medicine_id FROM schedules WHERE id = ? AND user_id = ?', [id, req.user.id]);
@@ -89,8 +91,8 @@ const markAsTaken = async (req, res) => {
 
         await db.query(`
             INSERT IGNORE INTO schedule_logs (schedule_id, user_id, scheduled_date, status)
-            VALUES (?, ?, ?, 'taken')
-        `, [id, req.user.id, today]);
+            VALUES (?, ?, CURDATE(), 'taken')
+        `, [id, req.user.id]);
 
         // Kurangi stok
         await db.query('UPDATE medicines SET stock = stock - 1 WHERE id = ? AND stock > 0', [check[0].medicine_id]);

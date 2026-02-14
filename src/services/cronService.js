@@ -23,18 +23,9 @@ const startCronJobs = () => {
         const now = new Date();
         const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}%`;
         const currentDay = now.toLocaleDateString('en-US', { weekday: 'short' }); 
-        
-        // Ambil tanggal hari ini dalam format YYYY-MM-DD untuk query SQL
-        // Kita gunakan toISOString().slice(0, 10) untuk ambil format tanggal
-        // Perhatian: Pastikan timezone server sesuai, atau gunakan library 'moment'/'date-fns' jika perlu strict timezone lokal
-        const offset = now.getTimezoneOffset() * 60000;
-        const localISOTime = (new Date(now - offset)).toISOString().slice(0, 10);
-        const currentDateSql = localISOTime;
 
         try {
-            // [LOGIC BARU] 
-            // Tambahkan: AND ? BETWEEN s.start_date AND s.end_date
-            // Artinya: Hari ini harus berada di antara tanggal mulai dan tanggal selesai
+            // Gunakan CURDATE() MySQL agar konsisten dengan getSchedules dan markAsTaken
             const query = `
                 SELECT s.id, s.time, s.days, s.user_id, u.email, u.name as user_name, m.name as medicine_name 
                 FROM schedules s
@@ -42,11 +33,10 @@ const startCronJobs = () => {
                 JOIN medicines m ON s.medicine_id = m.id
                 WHERE s.is_active = 1 
                 AND s.time LIKE ?
-                AND ? BETWEEN s.start_date AND s.end_date
+                AND CURDATE() BETWEEN s.start_date AND s.end_date
             `;
             
-            // Masukkan currentDateSql ke parameter query
-            const [schedules] = await db.query(query, [timeString, currentDateSql]);
+            const [schedules] = await db.query(query, [timeString]);
 
             for (const job of schedules) {
                 let scheduledDays = job.days;
